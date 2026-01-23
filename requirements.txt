@@ -1,8 +1,7 @@
-gradio
 loguru
 numpy
 opencv-python
-Pillow
 py360convert
 scipy
 torch
+tqdm

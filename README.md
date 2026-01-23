@@ -39,7 +39,7 @@ Omni-SFM is a Structure-from-Motion (SfM) pipeline implementation for omnidirect
 ### Prerequisites
 
 - Python 3.8+
-- COLMAP installed (for command-line version)
+- COLMAP installed (command-line 버전; 도커 이미지는 포함)
 - CUDA-enabled GPU recommended
 
 ### Quick Start
@@ -53,29 +53,97 @@ cd omni-sfm
 pip install -r requirements.txt
 ```
 
-### Additional Setup
+### Docker
 
-1. For command-line COLMAP:
+```bash
+# Build
+docker build -t omni-sfm .
 
-   Follow COLMAP [installation instructions](https://colmap.github.io/install.html) for your platform.
+# Run
+docker run --rm \
+  -v "$(pwd)":/app \
+  -v "$(pwd)/outputs":/app/outputs \
+  -v "$(pwd)/inputs":/app/inputs \
+  omni-sfm \
+  --input_video /app/inputs/input.mp4 \
+  --output_dir /app/outputs/run1
+```
 
-2. For ComfyUI integration:
+또는 docker-compose:
 
-   Follow ComfyUI [installation instructions](https://github.com/comfyanonymous/ComfyUI) for your platform.
+```bash
+docker compose run --rm omni-sfm \
+  --input_video /app/inputs/input.mp4 \
+  --output_dir /app/outputs/run1
+```
+
+> 참고: 이 도커 이미지에는 CUDA 지원 COLMAP이 포함되어 있습니다.  
+> NVIDIA GPU 환경에서는 컨테이너에 `--gpus all`을 추가해 GPU 가속을 사용할 수 있습니다.
+
+docker-compose 기본 커맨드들:
+
+```bash
+# 1) 360도 영상 -> pinhole 이미지 생성
+docker compose run --rm omni-sfm-pinhole
+
+# 2) pinhole 이미지 -> COLMAP SfM
+docker compose run --rm omni-sfm-colmap
+
+# 3) 1) + 2) 연속 실행
+docker compose run --rm omni-sfm-all
+```
+
+GPU 사용 관련:
+
+- 현재 이미지의 COLMAP은 CUDA 빌드입니다.
+- GPU 가속을 쓰려면 NVIDIA Container Toolkit이 필요합니다.
+- 예: `docker run --gpus all ...` (Linux + NVIDIA GPU 환경 기준)
+- macOS에서는 NVIDIA GPU 가속을 사용할 수 없습니다.
+
+docker-compose GPU 프로필:
+
+```bash
+# pinhole 단계도 동일하게 gpu 프로필로 실행
+docker compose --profile gpu run --rm omni-sfm-pinhole
+
+# COLMAP 단계만 GPU로
+docker compose --profile gpu run --rm omni-sfm-colmap-gpu
+
+# pinhole + COLMAP 연속 실행을 GPU로
+docker compose --profile gpu run --rm omni-sfm-all-gpu
+```
 
 ## Usage
 
-### Main Application
-
-Run the GUI application:
+### CLI
 
 ```bash
-python app.py
+python app.py \
+  --input_video inputs/input.mp4 \
+  --output_dir outputs/run1
 ```
 
-Gradio UI:
+옵션 예시:
 
-![](assets/cover.jpg)
+```bash
+python app.py \
+  --input_video inputs/input.mp4 \
+  --output_dir outputs/run1 \
+  --frame_interval 24 \
+  --width 640 \
+  --height 640 \
+  --fov_h 90 \
+  --fov_v 90
+```
+
+뷰를 커스텀하려면 JSON 파일을 넘깁니다:
+
+```bash
+python app.py \
+  --input_video inputs/input.mp4 \
+  --output_dir outputs/run1 \
+  --views_json configs/views.json
+```
 
 Output data structure:
 
@@ -139,67 +207,6 @@ The project includes several scripts in the `scripts/` directory:
 ## Configuration
 
 Modify `src/omni_processor.py` for pipeline configuration options.
-
-## ComfyUI Quick Start Guide
-
-The project includes a ComfyUI implementation for panoramic video processing and reconstruction with these features:
-
-- Panoramic video loading (equirectangular and cubemap formats)
-- Virtual pinhole camera generation from panoramic frames
-- Panoramic-specific reconstruction parameters
-- Interactive 360° preview capabilities
-
-### Installation
-
-1. Install ComfyUI (if not already installed):
-
-```bash
-git clone https://github.com/comfyanonymous/ComfyUI
-cd ComfyUI
-pip install -r requirements.txt
-```
-
-2. Copy our nodes to ComfyUI's custom_nodes folder:
-
-```bash
-mkdir /path/to/ComfyUI/custom_nodes/omni-sfm
-cp -r /path/to/omni-sfm/src/* /path/to/ComfyUI/custom_nodes/omni-sfm/
-```
-
-3. Install required dependencies:
-
-```bash
-pip install -r /path/to/omni-sfm/requirements.txt
-```
-
-### Basic Usage
-
-1. Start ComfyUI:
-
-```bash
-python main.py
-```
-
-2. In the web interface (<http://localhost:8188>):
-   - Right-click to open node menu
-   - Search for "Omni" to find our nodes
-   - Connect them as shown below:
-
-```
-[OmniVideoLoader] → [OmniParameterControls] → [OmniVideoProcessor]
-                     ↓
-[OmniPreview] ← [OmniReconstruction]
-```
-
-UI:
-![](assets/comfyui.jpg)
-
-3. Example workflow:
-   - Load panoramic video with OmniVideoLoader
-   - Set parameters with OmniParameterControls
-   - Process video with OmniVideoProcessor
-   - View results with OmniPreview
-   - Run reconstruction with OmniReconstruction
 
 ### Contributing
 

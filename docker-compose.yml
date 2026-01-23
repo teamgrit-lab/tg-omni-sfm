@@ -1,0 +1,95 @@
+services:
+  omni-sfm:
+    build: .
+    volumes:
+      - .:/app
+      - ./outputs:/app/outputs
+      - ./inputs:/app/inputs
+  omni-sfm-pinhole:
+    build: .
+    profiles: ["gpu"]
+    volumes:
+      - .:/app
+      - ./outputs:/app/outputs
+      - ./inputs:/app/inputs
+    command:
+      - python
+      - app.py
+      - --input_video
+      - /app/inputs/input.mp4
+      - --output_dir
+      - /app/outputs/run1
+  omni-sfm-colmap:
+    build: .
+    volumes:
+      - .:/app
+      - ./outputs:/app/outputs
+    command:
+      - python
+      - scripts/run_cmd_colmap_rig_sfm.py
+      - --image_path
+      - /app/outputs/run1/pinhole_images/images
+      - --rig_config
+      - /app/outputs/run1/pinhole_images/rig_config.json
+      - --camera_config
+      - /app/outputs/run1/pinhole_images/camera_params.json
+      - --output_path
+      - /app/outputs/run1/sfm
+  omni-sfm-colmap-gpu:
+    build: .
+    profiles: ["gpu"]
+    volumes:
+      - .:/app
+      - ./outputs:/app/outputs
+    device_requests:
+      - driver: nvidia
+        count: all
+        capabilities: ["gpu"]
+    command:
+      - python
+      - scripts/run_cmd_colmap_rig_sfm.py
+      - --image_path
+      - /app/outputs/run1/pinhole_images/images
+      - --rig_config
+      - /app/outputs/run1/pinhole_images/rig_config.json
+      - --camera_config
+      - /app/outputs/run1/pinhole_images/camera_params.json
+      - --output_path
+      - /app/outputs/run1/sfm
+  omni-sfm-all:
+    build: .
+    volumes:
+      - .:/app
+      - ./outputs:/app/outputs
+      - ./inputs:/app/inputs
+    command:
+      - bash
+      - -lc
+      - >-
+        python app.py --input_video /app/inputs/input.mp4 --output_dir /app/outputs/run1
+        && python scripts/run_cmd_colmap_rig_sfm.py
+        --image_path /app/outputs/run1/pinhole_images/images
+        --rig_config /app/outputs/run1/pinhole_images/rig_config.json
+        --camera_config /app/outputs/run1/pinhole_images/camera_params.json
+        --output_path /app/outputs/run1/sfm
+  omni-sfm-all-gpu:
+    build: .
+    profiles: ["gpu"]
+    volumes:
+      - .:/app
+      - ./outputs:/app/outputs
+      - ./inputs:/app/inputs
+    device_requests:
+      - driver: nvidia
+        count: all
+        capabilities: ["gpu"]
+    command:
+      - bash
+      - -lc
+      - >-
+        python app.py --input_video /app/inputs/input.mp4 --output_dir /app/outputs/run1
+        && python scripts/run_cmd_colmap_rig_sfm.py
+        --image_path /app/outputs/run1/pinhole_images/images
+        --rig_config /app/outputs/run1/pinhole_images/rig_config.json
+        --camera_config /app/outputs/run1/pinhole_images/camera_params.json
+        --output_path /app/outputs/run1/sfm
