@@ -32,6 +32,7 @@ Omni-SFM is a Structure-from-Motion (SfM) pipeline implementation for omnidirect
 - Support for both command-line COLMAP and pycolmap workflows
 - Panoramic image processing capabilities
 - Rig-based SfM pipeline
+- Optional ArUco marker-based scale estimation for metric output
 - Modular architecture for easy extension
 
 ## Installation
@@ -203,6 +204,32 @@ The project includes several scripts in the `scripts/` directory:
    ```bash
    python scripts/run_pycolmap_rig_sfm.py [options]
    ```
+
+### Marker-based scale estimation (optional)
+
+If your pinhole images contain ArUco markers with known size, you can estimate
+metric scale and write a scaled reconstruction.
+This requires `opencv-contrib-python` for `cv2.aruco`.
+
+Example (post-process any COLMAP model):
+
+```bash
+python scripts/scale_model_with_markers.py \
+  --model_path outputs/20250602xxxxxx/sfm/sparse/0 \
+  --image_path outputs/20250602xxxxxx/pinhole_images/images \
+  --camera_config outputs/20250602xxxxxx/pinhole_images/camera_params.json \
+  --marker_length 0.2 \
+  --marker_dict DICT_4X4_50 \
+  --output_path outputs/20250602xxxxxx/sfm/sparse/0_marker_scaled
+```
+
+You can also enable it during the pycolmap pipeline with:
+
+```bash
+python scripts/run_pycolmap_rig_sfm.py \
+  --marker_length 0.2 \
+  --marker_dict DICT_4X4_50
+```
 
 ## Configuration
 

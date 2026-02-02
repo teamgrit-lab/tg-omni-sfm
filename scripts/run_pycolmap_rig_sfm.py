@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+from typing import List, Optional
 
 import numpy as np
 import pycolmap
@@ -16,6 +17,13 @@ def read_json_config(config_path: Path) -> dict:
     """Read a JSON configuration file."""
     with open(config_path, "r", encoding="utf-8") as f:
         return json.load(f)
+
+
+def parse_marker_ids(value: Optional[str]) -> Optional[List[int]]:
+    if not value:
+        return None
+    ids = [int(item.strip()) for item in value.split(",") if item.strip()]
+    return ids or None
 
 
 def create_rig_config(
@@ -110,8 +118,77 @@ def run(args: argparse.Namespace) -> None:
         ba_refine_extra_params=False,
     )
     recs = pycolmap.incremental_mapping(database_path, input_image_path, rec_path, opts)
+    marker_payload = None
+    if args.marker_length is not None:
+        try:
+            from src.marker_scale import (
+                MarkerScaleConfig,
+                apply_scale_to_reconstruction,
+                collect_marker_observations,
+                estimate_scale_from_observations,
+                write_scale_report,
+            )
+        except ImportError as exc:
+            logging.error(f"Marker scaling unavailable: {exc}")
+        else:
+            marker_config = MarkerScaleConfig(
+                marker_length=args.marker_length,
+                marker_dict=args.marker_dict,
+                marker_ids=parse_marker_ids(args.marker_ids),
+                min_observations=args.marker_min_observations,
+                image_stride=args.marker_image_stride,
+                max_images=args.marker_max_images,
+            )
+            try:
+                observations, detection_summary = collect_marker_observations(
+                    input_image_path, args.input_camera_config, marker_config
+                )
+            except ImportError as exc:
+                logging.error(f"Marker detection unavailable: {exc}")
+                observations = []
+                detection_summary = {}
+            if not observations:
+                logging.warning("No marker observations found. Skipping marker scaling.")
+            else:
+                marker_payload = (
+                    marker_config,
+                    observations,
+                    detection_summary,
+                    apply_scale_to_reconstruction,
+                    estimate_scale_from_observations,
+                    write_scale_report,
+                )
+
     for idx, rec in recs.items():
         logging.info(f"#{idx} {rec.summary()}")
+        if not marker_payload:
+            continue
+
+        (
+            marker_config,
+            observations,
+            detection_summary,
+            apply_scale,
+            estimate_scale,
+            write_report,
+        ) = marker_payload
+        scale_result = estimate_scale(rec, observations, marker_config.min_observations)
+        if scale_result is None:
+            logging.warning("Marker scale estimation failed. Skipping scaling output.")
+            continue
+
+        apply_scale(rec, scale_result.scale_meter_per_sfm)
+        scaled_dir = rec_path / f"{idx}_{args.marker_scaled_suffix}"
+        scaled_dir.mkdir(parents=True, exist_ok=True)
+        rec.write(scaled_dir)
+
+        report_path = args.marker_report_path
+        if report_path is None:
+            report_path = scaled_dir / "marker_scale_report.json"
+        elif report_path.suffix == "":
+            report_path = report_path / f"marker_scale_{idx}.json"
+        write_report(report_path, scale_result, detection_summary, marker_config)
+        logging.info(f"Marker-scaled model written to: {scaled_dir}")
 
 
 if __name__ == "__main__":
@@ -145,5 +222,53 @@ if __name__ == "__main__":
         "--matcher",
         default="sequential",
         choices=["sequential", "exhaustive", "vocabtree", "spatial"],
+    )
+    parser.add_argument(
+        "--marker_length",
+        type=float,
+        default=None,
+        help="Marker size in meters (enables marker-based scale estimation)",
+    )
+    parser.add_argument(
+        "--marker_dict",
+        type=str,
+        default="DICT_4X4_50",
+        help="ArUco dictionary name (e.g. DICT_4X4_50)",
+    )
+    parser.add_argument(
+        "--marker_ids",
+        type=str,
+        default=None,
+        help="Comma-separated marker IDs to use (default: all)",
+    )
+    parser.add_argument(
+        "--marker_min_observations",
+        type=int,
+        default=2,
+        help="Minimum observations per marker",
+    )
+    parser.add_argument(
+        "--marker_image_stride",
+        type=int,
+        default=1,
+        help="Process every Nth image for marker detection",
+    )
+    parser.add_argument(
+        "--marker_max_images",
+        type=int,
+        default=None,
+        help="Maximum number of images to process for markers",
+    )
+    parser.add_argument(
+        "--marker_scaled_suffix",
+        type=str,
+        default="marker_scaled",
+        help="Suffix for scaled reconstruction output folder",
+    )
+    parser.add_argument(
+        "--marker_report_path",
+        type=Path,
+        default=None,
+        help="Output path for marker scale report (file or directory)",
     )
     run(parser.parse_args())

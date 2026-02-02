@@ -43,6 +43,7 @@ Omni-SFM은 360도 영상/이미지를 위한 Structure-from-Motion (SfM) 파이
 - 명령줄 COLMAP 및 pycolmap 워크플로우 지원
 - 파노라마 이미지 처리 기능
 - 릭 기반 SfM 파이프라인
+- ArUco 마커 기반 스케일 추정(선택)
 - 확장이 용이한 모듈식 아키텍처
 
 ## 설치
@@ -270,6 +271,32 @@ outputs/your_output/
    ```bash
    python scripts/run_pycolmap_rig_sfm.py [옵션]
    ```
+
+### 마커 기반 스케일 추정 (선택)
+
+핀홀 이미지에 ArUco 마커가 있고 실제 크기를 알고 있다면,
+재구성 결과를 미터 단위로 스케일링할 수 있습니다.
+이 기능은 `cv2.aruco`를 위해 `opencv-contrib-python`이 필요합니다.
+
+예시 (기존 COLMAP 모델 후처리):
+
+```bash
+python scripts/scale_model_with_markers.py \
+  --model_path outputs/20250602xxxxxx/sfm/sparse/0 \
+  --image_path outputs/20250602xxxxxx/pinhole_images/images \
+  --camera_config outputs/20250602xxxxxx/pinhole_images/camera_params.json \
+  --marker_length 0.2 \
+  --marker_dict DICT_4X4_50 \
+  --output_path outputs/20250602xxxxxx/sfm/sparse/0_marker_scaled
+```
+
+pycolmap 파이프라인에서 바로 켜려면:
+
+```bash
+python scripts/run_pycolmap_rig_sfm.py \
+  --marker_length 0.2 \
+  --marker_dict DICT_4X4_50
+```
 
 ## 설정
 
