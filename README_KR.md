@@ -298,6 +298,15 @@ python scripts/run_pycolmap_rig_sfm.py \
   --marker_dict DICT_4X4_50
 ```
 
+마커 출력용 이미지를 만들려면:
+
+```bash
+python scripts/generate_aruco_markers.py \
+  --marker_dict DICT_4X4_50 \
+  --marker_ids 0-5 \
+  --output_dir assets/markers
+```
+
 ## 설정
 
 파이프라인 설정 옵션은 `src/omni_processor.py`를 수정하세요.

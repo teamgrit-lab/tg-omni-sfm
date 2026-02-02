@@ -231,6 +231,15 @@ python scripts/run_pycolmap_rig_sfm.py \
   --marker_dict DICT_4X4_50
 ```
 
+To generate printable ArUco markers:
+
+```bash
+python scripts/generate_aruco_markers.py \
+  --marker_dict DICT_4X4_50 \
+  --marker_ids 0-5 \
+  --output_dir assets/markers
+```
+
 ## Configuration
 
 Modify `src/omni_processor.py` for pipeline configuration options.
