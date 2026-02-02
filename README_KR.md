@@ -274,9 +274,9 @@ outputs/your_output/
 
 ### 마커 기반 스케일 추정 (선택)
 
-핀홀 이미지에 ArUco 마커가 있고 실제 크기를 알고 있다면,
-재구성 결과를 미터 단위로 스케일링할 수 있습니다.
-이 기능은 `cv2.aruco`를 위해 `opencv-contrib-python`이 필요합니다.
+핀홀 이미지에 ArUco 마커가 있으면 재구성 결과를 미터 단위로
+스케일링할 수 있습니다. 이 기능은 `cv2.aruco`를 위해
+`opencv-contrib-python`이 필요합니다.
 
 예시 (기존 COLMAP 모델 후처리):
 
@@ -296,6 +296,34 @@ pycolmap 파이프라인에서 바로 켜려면:
 python scripts/run_pycolmap_rig_sfm.py \
   --marker_length 0.2 \
   --marker_dict DICT_4X4_50
+```
+
+#### 보드 기반 스케일 (권장)
+
+여러 마커가 고정된 A4 보드로 거리 제약을 주면 더 안정적입니다:
+
+```bash
+python scripts/scale_model_with_markers.py \
+  --model_path outputs/20250602xxxxxx/sfm/sparse/0 \
+  --image_path outputs/20250602xxxxxx/pinhole_images/images \
+  --camera_config outputs/20250602xxxxxx/pinhole_images/camera_params.json \
+  --marker_board_spec assets/marker_boards/aruco_board_a4_v1.json \
+  --output_path outputs/20250602xxxxxx/sfm/sparse/0_board_scaled
+```
+
+pycolmap 파이프라인에서 바로 켜려면:
+
+```bash
+python scripts/run_pycolmap_rig_sfm.py \
+  --marker_board_spec assets/marker_boards/aruco_board_a4_v1.json
+```
+
+A4 보드 PDF 생성(100% 배율로 인쇄, 맞춤 인쇄 금지):
+
+```bash
+python scripts/generate_aruco_board_pdf.py \
+  --board_spec assets/marker_boards/aruco_board_a4_v1.json \
+  --output_pdf assets/marker_boards/aruco_board_a4_v1.pdf
 ```
 
 마커 출력용 이미지를 만들려면:

@@ -119,45 +119,73 @@ def run(args: argparse.Namespace) -> None:
     )
     recs = pycolmap.incremental_mapping(database_path, input_image_path, rec_path, opts)
     marker_payload = None
-    if args.marker_length is not None:
+    board_spec = None
+    if args.marker_length is not None or args.marker_board_spec is not None:
         try:
             from src.marker_scale import (
                 MarkerScaleConfig,
                 apply_scale_to_reconstruction,
                 collect_marker_observations,
+                estimate_scale_from_board_distances,
                 estimate_scale_from_observations,
+                load_marker_board_spec,
                 write_scale_report,
             )
         except ImportError as exc:
             logging.error(f"Marker scaling unavailable: {exc}")
         else:
-            marker_config = MarkerScaleConfig(
-                marker_length=args.marker_length,
-                marker_dict=args.marker_dict,
-                marker_ids=parse_marker_ids(args.marker_ids),
-                min_observations=args.marker_min_observations,
-                image_stride=args.marker_image_stride,
-                max_images=args.marker_max_images,
-            )
-            try:
-                observations, detection_summary = collect_marker_observations(
-                    input_image_path, args.input_camera_config, marker_config
-                )
-            except ImportError as exc:
-                logging.error(f"Marker detection unavailable: {exc}")
-                observations = []
-                detection_summary = {}
-            if not observations:
-                logging.warning("No marker observations found. Skipping marker scaling.")
+            if args.marker_board_spec is not None:
+                try:
+                    board_spec = load_marker_board_spec(args.marker_board_spec)
+                except (OSError, ValueError) as exc:
+                    logging.error(f"Failed to load board spec: {exc}")
+                    board_spec = None
+
+            marker_dict = args.marker_dict
+            marker_length = args.marker_length
+            marker_ids = parse_marker_ids(args.marker_ids)
+            if board_spec:
+                if marker_dict is None:
+                    marker_dict = board_spec.marker_dict
+                if marker_length is None:
+                    marker_length = board_spec.marker_length
+                if marker_ids is None:
+                    marker_ids = sorted(board_spec.markers_m.keys())
+
+            if marker_length is None:
+                logging.error("Marker length not provided; skipping marker scaling.")
             else:
-                marker_payload = (
-                    marker_config,
-                    observations,
-                    detection_summary,
-                    apply_scale_to_reconstruction,
-                    estimate_scale_from_observations,
-                    write_scale_report,
+                marker_config = MarkerScaleConfig(
+                    marker_length=marker_length,
+                    marker_dict=marker_dict or "DICT_4X4_50",
+                    marker_ids=marker_ids,
+                    min_observations=args.marker_min_observations,
+                    image_stride=args.marker_image_stride,
+                    max_images=args.marker_max_images,
                 )
+                try:
+                    observations, detection_summary = collect_marker_observations(
+                        input_image_path, args.input_camera_config, marker_config
+                    )
+                except ImportError as exc:
+                    logging.error(f"Marker detection unavailable: {exc}")
+                    observations = []
+                    detection_summary = {}
+                if not observations:
+                    logging.warning(
+                        "No marker observations found. Skipping marker scaling."
+                    )
+                else:
+                    marker_payload = (
+                        marker_config,
+                        observations,
+                        detection_summary,
+                        apply_scale_to_reconstruction,
+                        estimate_scale_from_observations,
+                        estimate_scale_from_board_distances,
+                        write_scale_report,
+                        board_spec,
+                    )
 
     for idx, rec in recs.items():
         logging.info(f"#{idx} {rec.summary()}")
@@ -170,9 +198,18 @@ def run(args: argparse.Namespace) -> None:
             detection_summary,
             apply_scale,
             estimate_scale,
+            estimate_scale_board,
             write_report,
+            board_spec,
         ) = marker_payload
-        scale_result = estimate_scale(rec, observations, marker_config.min_observations)
+        if board_spec:
+            scale_result = estimate_scale_board(
+                rec, observations, board_spec, marker_config.min_observations
+            )
+        else:
+            scale_result = estimate_scale(
+                rec, observations, marker_config.min_observations
+            )
         if scale_result is None:
             logging.warning("Marker scale estimation failed. Skipping scaling output.")
             continue
@@ -187,7 +224,9 @@ def run(args: argparse.Namespace) -> None:
             report_path = scaled_dir / "marker_scale_report.json"
         elif report_path.suffix == "":
             report_path = report_path / f"marker_scale_{idx}.json"
-        write_report(report_path, scale_result, detection_summary, marker_config)
+        write_report(
+            report_path, scale_result, detection_summary, marker_config, board_spec
+        )
         logging.info(f"Marker-scaled model written to: {scaled_dir}")
 
 
@@ -232,7 +271,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--marker_dict",
         type=str,
-        default="DICT_4X4_50",
+        default=None,
         help="ArUco dictionary name (e.g. DICT_4X4_50)",
     )
     parser.add_argument(
@@ -270,5 +309,11 @@ if __name__ == "__main__":
         type=Path,
         default=None,
         help="Output path for marker scale report (file or directory)",
+    )
+    parser.add_argument(
+        "--marker_board_spec",
+        type=Path,
+        default=None,
+        help="Path to marker board spec JSON (enables board distance scaling)",
     )
     run(parser.parse_args())

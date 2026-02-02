@@ -5,3 +5,4 @@ py360convert
 scipy
 torch
 tqdm
+Pillow

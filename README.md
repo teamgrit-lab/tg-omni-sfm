@@ -207,9 +207,9 @@ The project includes several scripts in the `scripts/` directory:
 
 ### Marker-based scale estimation (optional)
 
-If your pinhole images contain ArUco markers with known size, you can estimate
-metric scale and write a scaled reconstruction.
-This requires `opencv-contrib-python` for `cv2.aruco`.
+If your pinhole images contain ArUco markers, you can estimate metric scale and
+write a scaled reconstruction. This requires `opencv-contrib-python` for
+`cv2.aruco`.
 
 Example (post-process any COLMAP model):
 
@@ -229,6 +229,35 @@ You can also enable it during the pycolmap pipeline with:
 python scripts/run_pycolmap_rig_sfm.py \
   --marker_length 0.2 \
   --marker_dict DICT_4X4_50
+```
+
+#### Board-based scale (recommended)
+
+For better stability, use multiple markers on a fixed A4 board and estimate
+scale from inter-marker distances:
+
+```bash
+python scripts/scale_model_with_markers.py \
+  --model_path outputs/20250602xxxxxx/sfm/sparse/0 \
+  --image_path outputs/20250602xxxxxx/pinhole_images/images \
+  --camera_config outputs/20250602xxxxxx/pinhole_images/camera_params.json \
+  --marker_board_spec assets/marker_boards/aruco_board_a4_v1.json \
+  --output_path outputs/20250602xxxxxx/sfm/sparse/0_board_scaled
+```
+
+Or directly in the pycolmap pipeline:
+
+```bash
+python scripts/run_pycolmap_rig_sfm.py \
+  --marker_board_spec assets/marker_boards/aruco_board_a4_v1.json
+```
+
+Generate the A4 board PDF (print at 100% scale, no fit-to-page):
+
+```bash
+python scripts/generate_aruco_board_pdf.py \
+  --board_spec assets/marker_boards/aruco_board_a4_v1.json \
+  --output_pdf assets/marker_boards/aruco_board_a4_v1.pdf
 ```
 
 To generate printable ArUco markers:

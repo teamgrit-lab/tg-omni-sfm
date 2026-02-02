@@ -19,6 +19,33 @@ class MarkerScaleConfig:
 
 
 @dataclass
+class MarkerBoardSpec:
+    name: str
+    marker_length: float
+    marker_dict: str
+    markers_m: Dict[int, List[float]]
+    page_size_m: Optional[Tuple[float, float]] = None
+    marker_separation: Optional[float] = None
+
+    def to_dict(self) -> dict:
+        markers = [
+            {"id": marker_id, "center_m": center}
+            for marker_id, center in sorted(self.markers_m.items())
+        ]
+        page = None
+        if self.page_size_m:
+            page = {"width_m": self.page_size_m[0], "height_m": self.page_size_m[1]}
+        return {
+            "name": self.name,
+            "marker_length": self.marker_length,
+            "marker_dict": self.marker_dict,
+            "markers": markers,
+            "page": page,
+            "marker_separation": self.marker_separation,
+        }
+
+
+@dataclass
 class MarkerObservation:
     image_name: str
     marker_id: int
@@ -34,6 +61,7 @@ class MarkerScaleResult:
     num_markers: int
     markers_sfm: Dict[int, List[float]]
     images_used: int
+    method: str = "marker_size"
     note: Optional[str] = None
 
     def to_dict(self) -> dict:
@@ -45,6 +73,7 @@ class MarkerScaleResult:
             "num_markers": self.num_markers,
             "markers_sfm": self.markers_sfm,
             "images_used": self.images_used,
+            "method": self.method,
             "note": self.note,
         }
 
@@ -100,6 +129,41 @@ def load_camera_params(camera_params_path: Path) -> Dict[str, dict]:
         image_name = f"{cam['image_prefix']}/{cam['image_name']}"
         params_by_name[image_name] = cam
     return params_by_name
+
+
+def load_marker_board_spec(board_path: Path) -> MarkerBoardSpec:
+    with open(board_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    name = data.get("name") or board_path.stem
+    marker_length = float(data["marker_length"])
+    marker_dict = data.get("marker_dict", "DICT_4X4_50")
+    marker_separation = data.get("marker_separation")
+    page_size_m = None
+    page = data.get("page") or {}
+    if page and "width_m" in page and "height_m" in page:
+        page_size_m = (float(page["width_m"]), float(page["height_m"]))
+
+    markers_m: Dict[int, List[float]] = {}
+    for entry in data.get("markers", []):
+        marker_id = int(entry["id"])
+        center = entry.get("center_m") or entry.get("center")
+        if center is None or len(center) < 2:
+            raise ValueError(f"Marker center missing for id {marker_id}")
+        center_vec = [float(center[0]), float(center[1]), float(center[2]) if len(center) > 2 else 0.0]
+        markers_m[marker_id] = center_vec
+
+    if not markers_m:
+        raise ValueError("Marker board spec has no markers.")
+
+    return MarkerBoardSpec(
+        name=name,
+        marker_length=marker_length,
+        marker_dict=marker_dict,
+        markers_m=markers_m,
+        page_size_m=page_size_m,
+        marker_separation=marker_separation,
+    )
 
 
 def collect_marker_observations(
@@ -172,11 +236,11 @@ def qvec_to_rotmat(qvec: Iterable[float]) -> np.ndarray:
     return rotation.as_matrix()
 
 
-def estimate_scale_from_observations(
+def _group_observations(
     reconstruction,
     observations: List[MarkerObservation],
     min_observations: int,
-) -> Optional[MarkerScaleResult]:
+) -> Dict[int, List[Tuple[MarkerObservation, object]]]:
     name_to_image = {
         image.name: image
         for image in reconstruction.images.values()
@@ -194,6 +258,59 @@ def estimate_scale_from_observations(
         for marker_id, items in obs_by_marker.items()
         if len(items) >= min_observations
     }
+    return obs_by_marker
+
+
+def estimate_marker_positions_from_rays(
+    reconstruction,
+    observations: List[MarkerObservation],
+    min_observations: int,
+) -> Tuple[Dict[int, np.ndarray], int, int]:
+    obs_by_marker = _group_observations(reconstruction, observations, min_observations)
+    if not obs_by_marker:
+        return {}, 0, 0
+
+    markers_sfm: Dict[int, np.ndarray] = {}
+    num_obs = 0
+    images_used = set()
+    eye = np.eye(3, dtype=np.float64)
+
+    for marker_id, entries in obs_by_marker.items():
+        A = np.zeros((3, 3), dtype=np.float64)
+        b = np.zeros((3,), dtype=np.float64)
+        valid_obs = 0
+        for obs, image in entries:
+            qvec = np.asarray(image.qvec, dtype=np.float64)
+            tvec = np.asarray(image.tvec, dtype=np.float64)
+            rot_cw = qvec_to_rotmat(qvec)
+            cam_center = -rot_cw.T @ tvec
+            v_world = rot_cw.T @ obs.tvec
+            norm = float(np.linalg.norm(v_world))
+            if norm < 1e-9:
+                continue
+            direction = v_world / norm
+            proj = eye - np.outer(direction, direction)
+            A += proj
+            b += proj @ cam_center
+            valid_obs += 1
+            num_obs += 1
+            images_used.add(obs.image_name)
+
+        if valid_obs < min_observations:
+            continue
+        if np.linalg.matrix_rank(A) < 3:
+            continue
+        markers_sfm[marker_id] = np.linalg.solve(A, b)
+
+    return markers_sfm, num_obs, len(images_used)
+
+
+def estimate_scale_from_observations(
+    reconstruction,
+    observations: List[MarkerObservation],
+    min_observations: int,
+) -> Optional[MarkerScaleResult]:
+    obs_by_marker = _group_observations(reconstruction, observations, min_observations)
     if not obs_by_marker:
         return None
 
@@ -264,6 +381,73 @@ def estimate_scale_from_observations(
         num_markers=num_markers,
         markers_sfm=markers_sfm,
         images_used=len(images_used),
+        method="marker_size",
+    )
+
+
+def estimate_scale_from_board_distances(
+    reconstruction,
+    observations: List[MarkerObservation],
+    board_spec: MarkerBoardSpec,
+    min_observations: int,
+) -> Optional[MarkerScaleResult]:
+    markers_sfm, num_obs, images_used = estimate_marker_positions_from_rays(
+        reconstruction, observations, min_observations
+    )
+    if not markers_sfm:
+        return None
+
+    common_ids = sorted(set(markers_sfm.keys()) & set(board_spec.markers_m.keys()))
+    if len(common_ids) < 2:
+        return None
+
+    ratios = []
+    for i, marker_i in enumerate(common_ids):
+        for marker_j in common_ids[i + 1 :]:
+            p_sfm = markers_sfm[marker_i]
+            q_sfm = markers_sfm[marker_j]
+            d_sfm = float(np.linalg.norm(p_sfm - q_sfm))
+            if d_sfm < 1e-9:
+                continue
+            p_real = np.asarray(board_spec.markers_m[marker_i], dtype=np.float64)
+            q_real = np.asarray(board_spec.markers_m[marker_j], dtype=np.float64)
+            d_real = float(np.linalg.norm(p_real - q_real))
+            if d_real <= 0:
+                continue
+            ratios.append(d_real / d_sfm)
+
+    if not ratios:
+        return None
+
+    scale_meter_per_sfm = float(np.median(ratios))
+    if scale_meter_per_sfm <= 0:
+        return None
+    scale_sfm_per_meter = 1.0 / scale_meter_per_sfm
+
+    errors = []
+    for i, marker_i in enumerate(common_ids):
+        for marker_j in common_ids[i + 1 :]:
+            p_sfm = markers_sfm[marker_i]
+            q_sfm = markers_sfm[marker_j]
+            d_sfm = float(np.linalg.norm(p_sfm - q_sfm))
+            p_real = np.asarray(board_spec.markers_m[marker_i], dtype=np.float64)
+            q_real = np.asarray(board_spec.markers_m[marker_j], dtype=np.float64)
+            d_real = float(np.linalg.norm(p_real - q_real))
+            pred = scale_meter_per_sfm * d_sfm
+            errors.append(d_real - pred)
+    rmse = float(np.sqrt(np.mean(np.square(errors)))) if errors else 0.0
+
+    markers_sfm_list = {mid: [float(v) for v in pos] for mid, pos in markers_sfm.items()}
+    return MarkerScaleResult(
+        scale_sfm_per_meter=scale_sfm_per_meter,
+        scale_meter_per_sfm=scale_meter_per_sfm,
+        rmse_sfm=rmse,
+        num_observations=num_obs,
+        num_markers=len(common_ids),
+        markers_sfm=markers_sfm_list,
+        images_used=images_used,
+        method="board_distance",
+        note=f"board={board_spec.name}",
     )
 
 
@@ -290,6 +474,7 @@ def write_scale_report(
     result: MarkerScaleResult,
     detection_summary: dict,
     config: MarkerScaleConfig,
+    board_spec: Optional[MarkerBoardSpec] = None,
 ) -> None:
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report = {
@@ -304,5 +489,7 @@ def write_scale_report(
         "detection_summary": detection_summary,
         "scale_result": result.to_dict(),
     }
+    if board_spec:
+        report["board_spec"] = board_spec.to_dict()
     with open(report_path, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
