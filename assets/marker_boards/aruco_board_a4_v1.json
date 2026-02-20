@@ -1,0 +1,18 @@
+{
+  "name": "aruco_board_a4_v1",
+  "marker_dict": "DICT_4X4_50",
+  "marker_length": 0.06,
+  "marker_separation": 0.02,
+  "page": {
+    "width_m": 0.21,
+    "height_m": 0.297
+  },
+  "markers": [
+    {"id": 0, "center_m": [0.065, 0.0685, 0.0]},
+    {"id": 1, "center_m": [0.145, 0.0685, 0.0]},
+    {"id": 2, "center_m": [0.065, 0.1485, 0.0]},
+    {"id": 3, "center_m": [0.145, 0.1485, 0.0]},
+    {"id": 4, "center_m": [0.065, 0.2285, 0.0]},
+    {"id": 5, "center_m": [0.145, 0.2285, 0.0]}
+  ]
+}

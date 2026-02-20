@@ -41,17 +41,25 @@ def process_video_to_pinhole(video_path: Path, output_dir: Path, frame_interval:
         "fov_h": 90,
         "fov_v": 90,
         "frame_interval": frame_interval,
-        "num_steps_yaw": 4,
+        "num_steps_yaw": 8,
         "pitches_deg": [-35.0, 35.0],
         "views": {
             "pitch_35_yaw_0": (35, 0),
+            "pitch_35_yaw_45": (35, 45),
             "pitch_35_yaw_90": (35, 90),
-            "pitch_35_yaw_-90": (35, -90),
+            "pitch_35_yaw_135": (35, 135),
             "pitch_35_yaw_180": (35, 180),
+            "pitch_35_yaw_-45": (35, -45),
+            "pitch_35_yaw_-90": (35, -90),
+            "pitch_35_yaw_-135": (35, -135),
             "pitch_-35_yaw_0": (-35, 0),
+            "pitch_-35_yaw_45": (-35, 45),
             "pitch_-35_yaw_90": (-35, 90),
-            "pitch_-35_yaw_-90": (-35, -90),
+            "pitch_-35_yaw_135": (-35, 135),
             "pitch_-35_yaw_180": (-35, 180),
+            "pitch_-35_yaw_-45": (-35, -45),
+            "pitch_-35_yaw_-90": (-35, -90),
+            "pitch_-35_yaw_-135": (-35, -135),
         },
     }
     
@@ -67,14 +75,21 @@ def process_video_to_pinhole(video_path: Path, output_dir: Path, frame_interval:
 def run_command(cmd_list):
     """Executes a command and prints its output."""
     import subprocess
+    import os
     print(f"\nExecuting: {' '.join(map(str, cmd_list))}")
     try:
+        env = os.environ.copy()
+        env.setdefault("QT_QPA_PLATFORM", "offscreen")
+        env.setdefault("OMP_NUM_THREADS", "1")
+        env.setdefault("OPENBLAS_NUM_THREADS", "1")
+        env.setdefault("MKL_NUM_THREADS", "1")
         process = subprocess.Popen(
             cmd_list,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             encoding="utf-8",
+            env=env,
         )
         while True:
             output = process.stdout.readline()
@@ -137,7 +152,7 @@ def run_colmap_sfm(pinhole_dir: Path, output_dir: Path, matcher: str = "sequenti
         "--image_path", str(image_path),
         "--ImageReader.camera_model", "PINHOLE",
         "--ImageReader.single_camera_per_folder", "1",
-        "--SiftExtraction.use_gpu", "0",  # Use CPU mode for Docker compatibility
+        "--SiftExtraction.use_gpu", "0",
     ]
     if run_command(cmd_feature) != 0:
         print("Feature extraction failed!")
@@ -178,14 +193,14 @@ def run_colmap_sfm(pinhole_dir: Path, output_dir: Path, matcher: str = "sequenti
             "sequential_matcher",
             "--database_path", str(database_path),
             "--SequentialMatching.loop_detection", "0",  # Disable loop detection (requires vocab tree)
-            "--SiftMatching.use_gpu", "0",  # Use CPU mode for Docker compatibility
+            "--SiftMatching.use_gpu", "0",
         ]
     else:
         cmd_matcher = [
             COLMAP_EXE,
             "exhaustive_matcher",
             "--database_path", str(database_path),
-            "--SiftMatching.use_gpu", "0",  # Use CPU mode for Docker compatibility
+            "--SiftMatching.use_gpu", "0",
         ]
     
     if run_command(cmd_matcher) != 0:
@@ -214,6 +229,7 @@ def run_colmap_sfm(pinhole_dir: Path, output_dir: Path, matcher: str = "sequenti
         "--database_path", str(database_path),
         "--image_path", str(image_path),
         "--output_path", str(sparse_path),
+        "--Mapper.multiple_models", "0",
         "--Mapper.ba_refine_focal_length", "0",
         "--Mapper.ba_refine_principal_point", "0",
         "--Mapper.ba_refine_extra_params", "0",
