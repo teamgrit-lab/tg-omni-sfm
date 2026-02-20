@@ -34,12 +34,18 @@ RUN apt-get update \
         libceres-dev \
         libgl1 \
         libglib2.0-0 \
+        libopenimageio-dev \
+        libopenexr-dev \
+        openimageio-tools \
+        libopencv-dev \
     && rm -rf /var/lib/apt/lists/*
 
 RUN git clone --depth 1 https://github.com/colmap/colmap.git /tmp/colmap \
     && cmake -S /tmp/colmap -B /tmp/colmap/build -GNinja \
         -DCMAKE_BUILD_TYPE=Release \
-        -DCUDA_ENABLED=ON \
+        -DCUDA_ENABLED=OFF \
+        -DGUI_ENABLED=OFF \
+        -DOPENGL_ENABLED=OFF \
     && cmake --build /tmp/colmap/build --target install \
     && rm -rf /tmp/colmap
 

@@ -1,6 +1,7 @@
 services:
   omni-sfm:
     build: .
+    profiles: ["disabled"]
     volumes:
       - .:/app
       - ./outputs:/app/outputs
@@ -12,6 +13,13 @@ services:
       - .:/app
       - ./outputs:/app/outputs
       - ./inputs:/app/inputs
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     command:
       - python
       - app.py
@@ -21,6 +29,7 @@ services:
       - /app/outputs/run1
   omni-sfm-colmap:
     build: .
+    profiles: ["disabled"]
     volumes:
       - .:/app
       - ./outputs:/app/outputs
@@ -41,10 +50,13 @@ services:
     volumes:
       - .:/app
       - ./outputs:/app/outputs
-    device_requests:
-      - driver: nvidia
-        count: all
-        capabilities: ["gpu"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     command:
       - python
       - scripts/run_cmd_colmap_rig_sfm.py
@@ -58,6 +70,7 @@ services:
       - /app/outputs/run1/sfm
   omni-sfm-all:
     build: .
+    profiles: ["disabled"]
     volumes:
       - .:/app
       - ./outputs:/app/outputs
@@ -79,10 +92,13 @@ services:
       - .:/app
       - ./outputs:/app/outputs
       - ./inputs:/app/inputs
-    device_requests:
-      - driver: nvidia
-        count: all
-        capabilities: ["gpu"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     command:
       - bash
       - -lc

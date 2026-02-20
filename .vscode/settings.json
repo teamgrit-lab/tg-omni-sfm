@@ -1,0 +1,12 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^sudo docker run --rm -v \"\\$\\(pwd\\)\":/workspace omni-sfm-colmap:latest bash -lc \"pip install --no-cache-dir open3d && python3 scripts/level_ply\\.py --input_ply /workspace/outputs/20260205020842/sfm/final_ply/points3D\\.ply --output_ply /workspace/outputs/20260205020842/sfm/final_ply/points3D_leveled\\.ply --axis \\+z --distance_threshold 0\\.03 --max_points 200000\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^sudo docker run --rm -v \"\\$\\(pwd\\)\":/workspace omni-sfm-colmap:latest bash -lc \"pip install --no-cache-dir open3d && python3 scripts/level_colmap_model\\.py --input_model /workspace/outputs/20260205020842/sfm/sparse/0 --input_ply /workspace/outputs/20260205020842/sfm/final_ply/points3D\\.ply --output_model /workspace/outputs/20260205020842/sfm/sparse_leveled/0 --axis \\+z --distance_threshold 0\\.03 --max_points 200000\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}
